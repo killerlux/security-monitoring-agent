@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-# security-monitoring-agent
 =======
 # Security Monitoring Agent
 
