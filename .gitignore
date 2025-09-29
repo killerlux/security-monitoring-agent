@@ -1,0 +1,108 @@
+# Security Monitoring Agent - .gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+.env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Monitoring specific
+/var/lib/security-monitor/
+monitoring-*.json
+state.json
+last-run.json
+*.log
+
+# Runtime and cache files
+test-output/
+exports/
+agent/models/*.json
+agent/models/__pycache__/
+agent/collectors/__pycache__/
+agent/appsec/__pycache__/
+agent/state/__pycache__/
+
+# Test outputs
+test-results/
+coverage/
+.pytest_cache/
+.tox/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Configuration overrides (keep templates)
+config/local-*.yaml
+config/secrets.yaml
+config/*.key
+config/*.pem
+
+# Documentation builds
+docs/_build/
+docs/build/
+
+# Package files
+*.tar.gz
+*.zip
+*.deb
+*.rpm
+
+# Security sensitive files
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# State and cache
+.state/
+.cache/

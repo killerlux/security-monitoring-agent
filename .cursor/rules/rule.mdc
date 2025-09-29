@@ -1,0 +1,11 @@
+# Project: Security Monitoring → AppSec Bridge
+# Goal: Itératif, petits changements, code testable, CI qui casse sur règles critiques.
+
+- Always show a brief plan and impacted files before coding.
+- Prefer small, reviewable diffs; avoid broad refactors unless requested.
+- Use Python 3.11+, standard library first; justify any new dependency.
+- Implement JSON Schema + example fixtures before collectors.
+- Add unit tests for parsers/diff/policy evaluation.
+- Generate human-readable run summary and rotate logs.
+- Enforce Conventional Commits and provide run/test commands after changes.
+- Never expose secrets, open ports, or run privileged actions by default.

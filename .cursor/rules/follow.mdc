@@ -1,0 +1,205 @@
+Contexte projet
+On construit un agent Linux de monitoring sécurité & système, exécuté toutes les 5 min (cron). Il collecte des métriques réseau/système, détecte les changements, et déclenche des alertes. On ajoute un pont AppSec : checks HTTP/TLS, SBOM+CVEs, DAST léger, et policy-as-code intégrables en CI pour casser un build si règles critiques violées.
+
+Cibles Linux : Debian/Ubuntu/CentOS/RHEL.
+Langage conseillé : Python 3.11+ (standard lib + outils CLI natifs). Bash ok pour sondes simples.
+Perf & sécu : overhead < 2% CPU en moyenne ; exécutions read-only quand possible ; timeouts par sonde.
+Livrables attendus
+Schema JSON stable + exemple JSON (contrat de données) pour chaque run.
+
+Collecteurs (sondes) et diff vs baseline (ports/services nouveaux, pics tentatives, etc.).
+
+Stratégie d’alerting (seuils, corrélations, dé-dup).
+
+Sorties : fichiers JSON horodatés + résumé texte court + rotation de logs.
+
+Pont AppSec :
+
+Headers sécurité HTTP/TLS/HSTS/CSP/cookies, scan rapide cible locale.
+
+SBOM (CycloneDX) des services détectés + enrichissement CVE (lookup offline possible, sinon module découplé).
+
+DAST léger (ZAP automation headless) contre un service de démo optionnel.
+
+Policy-as-code (YAML + OPA/Rego minimal) appliquant 5–8 règles (ex : pas de Telnet, Wi-Fi off si Ethernet up, HTTP sans TLS interdit, pas de :latest, pas de port web inattendu).
+
+Intégration CI/CD : GitHub Actions (ou GitLab CI) qui échoue si règle critique.
+
+Playbook de tests (scénarios reproductibles).
+
+README clair + threat model bref (STRIDE) + mapping OWASP ASVS high-level.
+2) Schéma de sortie (contrat)
+
+Propose un JSON Schema (draft 2020-12) + échantillon JSON réaliste. Champs minimum :
+
+{
+  "timestamp": "RFC3339",
+  "host": "string",
+  "run_id": "uuid",
+  "network": {
+    "open_ports": [
+      {"proto":"tcp|udp","port":0,"process":"string","pid":0,"listen_addr":"ip","state":"LISTEN|..."}
+    ],
+    "services": [
+      {"name":"ssh|telnet|smb|http|https|...","active":true,"enabled":true,"version":"string|null","port":0,"risk":"low|medium|high"}
+    ],
+    "interfaces": [
+      {"name":"eth0|wlan0|...","type":"ethernet|wifi|virtual","state":"up|down","ipv4":"ip|null","ipv6":"ip|null","mac":"string","default_route":true,"speed_mbps":0,"ssid":"string|null","signal_dbm":-50,"rx_bytes":0,"tx_bytes":0,"rx_delta":0,"tx_delta":0}
+    ],
+    "connections": {
+      "by_state": {"ESTABLISHED":0,"TIME_WAIT":0,"LISTEN":0,"OTHER":0},
+      "attempts": {"icmp":0,"ssh":{"success":0,"fail":0},"telnet":{"success":0,"fail":0}}
+    },
+    "policy": {"wifi_enabled": true, "should_disable_wifi": true}
+  },
+  "system": {
+    "cpu": {"load1":0.0,"load5":0.0,"load15":0.0,"user_pct":0,"system_pct":0,"iowait_pct":0},
+    "memory": {"total_mb":0,"used_mb":0,"free_mb":0,"cached_mb":0},
+    "disk": [
+      {"mount":"/","fs":"ext4","size_gb":0,"used_gb":0,"used_pct":0.0,"inodes_pct":0.0}
+    ],
+    "top_processes": {
+      "by_cpu":[{"pid":0,"cmd":"string","user":"string","cpu_pct":0.0,"mem_pct":0.0}],
+      "by_mem":[{"pid":0,"cmd":"string","user":"string","cpu_pct":0.0,"mem_pct":0.0}]
+    }
+  },
+  "usb": {"recent_events":[{"action":"add|remove","time":"RFC3339","device":"string","vendor_id":"hex","product_id":"hex","class":"string"}]},
+  "appsec": {
+    "http_checks":[{"target":"url","hsts":true,"tls_version":"TLS1.3","csp":"present|missing","cookies_secure":true,"findings":["..."]}],
+    "sbom":{"format":"CycloneDX","components":[{"name":"openssl","version":"1.1.1w","cves":["CVE-..."]}]},
+    "dast":{"tool":"zap","issues":[{"risk":"low|medium|high","rule":"X-Content-Type-Options missing","url":"..."}]},
+    "policies":[{"id":"POL_HTTP_TLS","status":"pass|fail","evidence":{"target":"url","reason":"TLS absent"}}]
+  },
+  "diff": {
+    "new_open_ports":[{"proto":"tcp","port":22}],
+    "closed_ports":[{"proto":"tcp","port":8080}],
+    "service_state_changes":[{"name":"telnet","from":"inactive","to":"active"}],
+    "alerts":[{"severity":"info|warn|high","code":"POLICY_WIFI_ENABLED","message":"Wi-Fi actif alors que la politique exige Ethernet","evidence":{"iface":"wlan0"}}]
+  }
+}
+
+3) Collecte — commandes indicatives (Linux)
+
+Ports/connexions : ss -tulpen, ss -s, lsof -i
+
+Services : systemctl is-active|is-enabled, versions (sshd -V, nginx -v)
+
+Interfaces : ip link/addr/route, ethtool, nmcli, iw, /proc/net/dev (deltas RX/TX)
+
+Ressources : uptime, /proc/loadavg, vmstat, ps aux --sort, free -m, df -hT, iostat (si dispo)
+
+Tentatives (SSH/Telnet/ICMP) : journalctl -u ssh --since -5m, journalctl -k --since -10m, compteurs nft/iptables si présents
+
+USB : lsusb, udevadm monitor (tests)
+
+Implémente un cache local des compteurs (ex. /var/lib/security-monitor/state.json) pour calculer deltas (RX/TX, tentatives, etc.).
+
+4) Alerting (par défaut)
+
+RAM > 90% pendant 5 min, load1 > 2× vCPU, disque > 85%, iowait > 20%
+
+Telnet actif = HIGH immédiat ; SMB exposé 0.0.0.0 = WARN/HIGH contextuel
+
+Nouveau port LISTEN non baseliné = WARN
+
+Wi-Fi actif alors qu’Ethernet est up = WARN (+ recommandation de désactivation)
+
+Pics ICMP / SSH failed > seuil sur 5 min = WARN/HIGH
+
+Dé-dup : pas de répétition de la même alerte inchangée < 1h
+
+5) AppSec add-ons (pour CI)
+
+HTTP/TLS : valider HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, cookies Secure/HttpOnly, TLS ≥ 1.2.
+
+SBOM : générer CycloneDX (module séparé) + enrichir CVEs.
+
+DAST : profil ZAP “baseline scan” sur service de démo.
+
+Policy-as-code : mini-moteur (YAML) + option OPA/Rego pour 2–3 règles.
+
+6) Structure repo & conventions (à créer/mettre à jour)
+/agent/                    # code de l'agent
+  collectors/             # sondes (ports, services, net, system, usb, http_checks)
+  appsec/                 # sbom, cve, dast, policies
+  models/                 # schémas & pydantic
+  state/                  # cache runtime (gitignored)
+  __main__.py
+/config/
+  policies.yaml
+/scripts/
+  run.sh                  # lance une collecte unique
+  install_cron.sh         # installe */5 via crontab
+/ci/
+  github-actions.yml      # échoue si règle critique
+/docs/
+  PLAYBOOK.md             # scénarios de test
+  THREAT_MODEL.md
+  README.md
+.cursorrules              # (optionnel) règles projet
+
+7) Règles d’implémentation pour toi (Cursor)
+
+Toujours avant d’écrire du code :
+
+Afficher un mini-plan (fichiers impactés, fonctions, tests).
+
+Proposer petits incréments (PR-size friendly).
+
+Définir acceptance criteria mesurables.
+
+Pendant :
+
+Créer/modifier uniquement les fichiers annoncés.
+
+Produire du code exécutable, docstrings, et tests unitaires quand pertinent.
+
+Écrire un résumé de diff clair (ajouts/suppressions majeures).
+
+Pas de secrets, pas de ports ouverts, pas de dépendances inutiles.
+
+Après :
+
+Donner commandes de test (locaux + CI).
+
+Insérer exemples d’usage et de sorties (extrait JSON + résumé).
+
+Suggérer suivis (TODOs) si quelque chose reste partiel.
+
+Commits (Conventional Commits) :
+feat(agent): add open ports collector / test(ci): fail build on critical policy / docs: add PLAYBOOK scenarios.
+
+8) Scénarios de validation (automatisables)
+
+USB : branche/débranche → événement détecté.
+
+Ping local soutenu → pic ICMP.
+
+Wi-Fi on + Ethernet up → alerte policy.
+
+Docker bridge + veth → classification virtuelle correcte.
+
+Nouveau service HTTP local → port nouveau + check HTTP/TLS.
+
+CPU burn → top_processes + alerte seuil.
+
+SSH fails répétés → compteur & alerte.
+
+Disque >85% → alerte.
+
+9) Tâche initiale (ce que tu fais maintenant)
+
+Générer JSON Schema + exemple JSON complet (sections network, system, usb, appsec, diff).
+
+Créer squelettes de collecteurs avec interfaces (stubs) + state manager pour deltas.
+
+Ajouter README.md minimal et PLAYBOOK.md (scénarios).
+
+Fournir Makefile (targets: collect, lint, test, ci-dry-run).
+
+Proposer un workflow CI (actions) qui casse sur appsec.policies[*].status == "fail".
+
+Si une info manque, propose une hypothèse raisonnable, indique-la clairement, puis continue.
+
+
+utilise le MCP github pour les bonnes pratiques git a chaque feature 

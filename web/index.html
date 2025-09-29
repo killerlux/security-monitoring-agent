@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Monitoring Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        mono: ['JetBrains Mono', 'Consolas', 'Monaco', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .gauge {
+            position: relative;
+            width: 60px;
+            height: 60px;
+        }
+        .gauge svg {
+            transform: rotate(-90deg);
+        }
+        .gauge circle {
+            fill: none;
+            stroke-width: 6;
+        }
+        .gauge .background {
+            stroke: #e5e7eb;
+        }
+        .gauge .progress {
+            stroke: #3b82f6;
+            stroke-linecap: round;
+            transition: stroke-dasharray 0.3s ease;
+        }
+        .dark .gauge .background {
+            stroke: #374151;
+        }
+        .dark .gauge .progress {
+            stroke: #60a5fa;
+        }
+        .skeleton {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+        }
+        .dark .skeleton {
+            background: linear-gradient(90deg, #374151 25%, #4b5563 50%, #374151 75%);
+            background-size: 200% 100%;
+        }
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+        .toast {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 50;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+        }
+        .toast.show {
+            transform: translateX(0);
+        }
+    </style>
+</head>
+<body class="bg-neutral-50 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100">
+    <div class="min-h-screen">
+        <!-- Header collant -->
+        <header class="sticky top-0 z-50 bg-white/80 backdrop-blur border-b dark:bg-neutral-900/80">
+            <div class="max-w-6xl mx-auto px-4 py-3">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <h1 class="text-xl font-bold">🔒 Security Monitor</h1>
+                        <div class="flex items-center space-x-2">
+                            <select id="host-select" class="text-sm bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 rounded px-2 py-1">
+                                <option value="pc-002">pc-002</option>
+                            </select>
+                            <span id="status-badge" class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                                ● OK
+                            </span>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button id="trigger-scan-btn" class="flex items-center space-x-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <span id="scan-btn-text">Scanner</span>
+                        </button>
+                        <button id="refresh-btn" class="p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                        </button>
+                        <button id="dark-mode-btn" class="p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors">
+                            <svg class="w-4 h-4 dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+                            </svg>
+                            <svg class="w-4 h-4 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="max-w-6xl mx-auto px-4 py-4">
+            <!-- Barre de KPIs -->
+            <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+                <!-- CPU -->
+                <div class="rounded-2xl border p-4 md:p-6 bg-white dark:bg-neutral-800 dark:border-neutral-700">
+                    <div class="flex items-center justify-between mb-2">
+                        <h2 class="text-sm font-medium text-neutral-600 dark:text-neutral-400">CPU</h2>
+                        <div class="gauge">
+                            <svg width="60" height="60">
+                                <circle class="background" cx="30" cy="30" r="24"></circle>
+                                <circle id="cpu-progress" class="progress" cx="30" cy="30" r="24" stroke-dasharray="0 150.8"></circle>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="space-y-1">
+                        <div id="cpu-load" class="skeleton h-4 w-16 rounded"></div>
+                        <div id="cpu-usage" class="text-xs text-neutral-500 dark:text-neutral-400">Load 1m</div>
+                    </div>
+                </div>
+
+                <!-- RAM -->
+                <div class="rounded-2xl border p-4 md:p-6 bg-white dark:bg-neutral-800 dark:border-neutral-700">
+                    <div class="flex items-center justify-between mb-2">
+                        <h2 class="text-sm font-medium text-neutral-600 dark:text-neutral-400">RAM</h2>
+                        <div class="gauge">
+                            <svg width="60" height="60">
+                                <circle class="background" cx="30" cy="30" r="24"></circle>
+                                <circle id="ram-progress" class="progress" cx="30" cy="30" r="24" stroke-dasharray="0 150.8"></circle>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="space-y-1">
+                        <div id="ram-usage" class="skeleton h-4 w-20 rounded"></div>
+                        <div id="ram-total" class="text-xs text-neutral-500 dark:text-neutral-400">Used / Total</div>
+                    </div>
+                </div>
+
+                <!-- Disque -->
+                <div class="rounded-2xl border p-4 md:p-6 bg-white dark:bg-neutral-800 dark:border-neutral-700">
+                    <div class="flex items-center justify-between mb-2">
+                        <h2 class="text-sm font-medium text-neutral-600 dark:text-neutral-400">Disque</h2>
+                        <div class="gauge">
+                            <svg width="60" height="60">
+                                <circle class="background" cx="30" cy="30" r="24"></circle>
+                                <circle id="disk-progress" class="progress" cx="30" cy="30" r="24" stroke-dasharray="0 150.8"></circle>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="space-y-1">
+                        <div id="disk-usage" class="skeleton h-4 w-16 rounded"></div>
+                        <div id="disk-mount" class="text-xs text-neutral-500 dark:text-neutral-400">Root (/)</div>
+                    </div>
+                </div>
+
+                <!-- Réseau -->
+                <div class="rounded-2xl border p-4 md:p-6 bg-white dark:bg-neutral-800 dark:border-neutral-700">
+                    <div class="flex items-center justify-between mb-2">
+                        <h2 class="text-sm font-medium text-neutral-600 dark:text-neutral-400">Réseau</h2>
+                        <div class="flex items-center space-x-1">
+                            <div id="network-status" class="w-2 h-2 rounded-full bg-green-500"></div>
+                        </div>
+                    </div>
+                    <div class="space-y-1">
+                        <div id="network-interface" class="skeleton h-4 w-12 rounded"></div>
+                        <div id="network-traffic" class="text-xs text-neutral-500 dark:text-neutral-400">Interface</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Alertes -->
+            <section class="mb-6">
+                <div class="rounded-2xl border p-4 md:p-6 bg-white dark:bg-neutral-800 dark:border-neutral-700">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                        </svg>
+                        Alertes Actives
+                        <span id="alerts-count" class="ml-2 px-2 py-1 text-xs rounded-full bg-neutral-100 dark:bg-neutral-700">0</span>
+                    </h2>
+                    <div id="alerts-list" class="space-y-2">
+                        <div class="text-center py-8 text-neutral-500 dark:text-neutral-400">
+                            <svg class="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <p>Aucune alerte active</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Open Ports & Services -->
+            <section class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <!-- Table "Open Ports" -->
+                <div class="rounded-2xl border p-4 md:p-6 bg-white dark:bg-neutral-800 dark:border-neutral-700">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-lg font-semibold">Ports Ouverts</h2>
+                        <div class="relative">
+                            <input id="ports-search" type="text" placeholder="Rechercher..." class="text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-300 dark:border-neutral-600 rounded px-3 py-1 w-32">
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b border-neutral-200 dark:border-neutral-700">
+                                    <th class="text-left py-2">Port</th>
+                                    <th class="text-left py-2">Proto</th>
+                                    <th class="text-left py-2">Processus</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ports-table">
+                                <tr>
+                                    <td colspan="3" class="text-center py-4 text-neutral-500 dark:text-neutral-400">
+                                        <div class="skeleton h-4 w-full rounded mb-2"></div>
+                                        <div class="skeleton h-4 w-3/4 rounded mb-2"></div>
+                                        <div class="skeleton h-4 w-1/2 rounded"></div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- mini-chart CPU 1h -->
+                <div class="rounded-2xl border p-4 md:p-6 bg-white dark:bg-neutral-800 dark:border-neutral-700">
+                    <h2 class="text-base font-semibold mb-2">CPU (1h)</h2>
+                    <canvas id="cpu-chart" height="120"></canvas>
+                </div>
+            </section>
+
+            <!-- Détails système (accordéons) -->
+            <section class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Interfaces -->
+                <div class="rounded-2xl border p-4 md:p-6 bg-white dark:bg-neutral-800 dark:border-neutral-700">
+                    <h2 class="text-base font-semibold mb-4">Interfaces Réseau</h2>
+                    <div id="interfaces-list" class="space-y-2">
+                        <div class="skeleton h-8 w-full rounded mb-2"></div>
+                        <div class="skeleton h-8 w-3/4 rounded mb-2"></div>
+                        <div class="skeleton h-8 w-1/2 rounded"></div>
+                    </div>
+                </div>
+
+                <!-- USB récents -->
+                <div class="rounded-2xl border p-4 md:p-6 bg-white dark:bg-neutral-800 dark:border-neutral-700">
+                    <h2 class="text-base font-semibold mb-4">Événements USB</h2>
+                    <div id="usb-events-list" class="space-y-2">
+                        <div class="text-center py-4 text-neutral-500 dark:text-neutral-400">
+                            <svg class="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                            </svg>
+                            <p class="text-sm">Aucun événement USB récent</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Toast notifications -->
+    <div id="toast" class="toast">
+        <div class="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg p-4 max-w-sm">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm font-medium text-neutral-900 dark:text-neutral-100" id="toast-message">
+                        Données mises à jour
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/app.js"></script>
+</body>
+</html>

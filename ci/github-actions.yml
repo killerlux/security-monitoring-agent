@@ -1,0 +1,303 @@
+name: Security Monitoring CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+env:
+  PYTHON_VERSION: '3.11'
+  STATE_DIR: '/tmp/security-monitor'
+
+jobs:
+  # Job 1: Code Quality and Linting
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ss-utils systemd iproute2 procps curl
+        
+    - name: Create state directory
+      run: mkdir -p ${{ env.STATE_DIR }}
+      
+    - name: Lint code
+      run: |
+        python -m py_compile agent/**/*.py
+        
+    - name: Validate configuration
+      run: |
+        python -c "import yaml; yaml.safe_load(open('config/policies.yaml'))"
+        
+    - name: Run basic tests
+      run: |
+        python -m agent --schema
+        python -m agent --example --output ${{ env.STATE_DIR }}
+        python -m agent --test --output ${{ env.STATE_DIR }}
+
+  # Job 2: Security Policy Validation
+  security-policies:
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ss-utils systemd iproute2 procps curl
+        
+    - name: Create state directory
+      run: mkdir -p ${{ env.STATE_DIR }}
+      
+    - name: Test policy engine
+      run: |
+        python -c "
+        from agent.appsec.policy_engine import PolicyEngine
+        engine = PolicyEngine()
+        results = engine.evaluate_policies()
+        
+        # Check for critical policy failures
+        critical_failures = [r for r in results if r['status'] == 'fail' and r.get('severity') == 'high']
+        
+        if critical_failures:
+            print('CRITICAL: High-severity policy failures detected:')
+            for failure in critical_failures:
+                print(f'  - {failure[\"id\"]}: {failure.get(\"evidence\", {})}')
+            exit(1)
+        else:
+            print('All critical policies passed')
+        "
+        
+    - name: Test SBOM generation
+      run: |
+        python -c "
+        from agent.appsec.sbom_generator import SBOMGenerator
+        generator = SBOMGenerator()
+        sbom = generator.generate_sbom()
+        print(f'SBOM generated with {len(sbom[\"components\"])} components')
+        "
+
+  # Job 3: Integration Testing
+  integration-test:
+    runs-on: ubuntu-latest
+    needs: [lint-and-test, security-policies]
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ss-utils systemd iproute2 procps curl
+        
+    - name: Create state directory
+      run: mkdir -p ${{ env.STATE_DIR }}
+      
+    - name: Run full monitoring collection
+      run: |
+        python -m agent --collect --output ${{ env.STATE_DIR }} --config config/policies.yaml
+        
+    - name: Validate output format
+      run: |
+        # Check if output file was created
+        OUTPUT_FILE=$(ls -t ${{ env.STATE_DIR }}/monitoring-*.json | head -n1)
+        if [ -z "$OUTPUT_FILE" ]; then
+          echo "ERROR: No monitoring output file found"
+          exit 1
+        fi
+        
+        # Validate JSON structure
+        python -c "
+        import json
+        from agent.models.schema import MonitoringOutput
+        
+        with open('$OUTPUT_FILE', 'r') as f:
+            data = json.load(f)
+        
+        # Validate against schema
+        output = MonitoringOutput(**data)
+        print('Output validation successful')
+        print(f'Host: {output.host}')
+        print(f'Network ports: {len(output.network.open_ports)}')
+        print(f'System load: {output.system.cpu.load1}')
+        print(f'Alerts: {len(output.diff.alerts)}')
+        "
+        
+    - name: Check for critical alerts
+      run: |
+        OUTPUT_FILE=$(ls -t ${{ env.STATE_DIR }}/monitoring-*.json | head -n1)
+        
+        # Check for high-severity alerts
+        CRITICAL_ALERTS=$(python -c "
+        import json
+        with open('$OUTPUT_FILE', 'r') as f:
+            data = json.load(f)
+        
+        alerts = data.get('diff', {}).get('alerts', [])
+        critical = [a for a in alerts if a.get('severity') == 'high']
+        
+        if critical:
+            print('CRITICAL ALERTS DETECTED:')
+            for alert in critical:
+                print(f'  - {alert[\"code\"]}: {alert[\"message\"]}')
+            exit(1)
+        else:
+            print('No critical alerts detected')
+        ")
+        
+        echo "$CRITICAL_ALERTS"
+
+  # Job 4: AppSec Validation
+  appsec-validation:
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ss-utils systemd iproute2 procps curl
+        
+    - name: Test HTTP security checks
+      run: |
+        python -c "
+        from agent.appsec.http_checker import HTTPChecker
+        checker = HTTPChecker()
+        
+        # Test basic HTTP check
+        result = checker.check_target('https://httpbin.org')
+        if result:
+            print(f'HTTP check successful: {result[\"target\"]}')
+            print(f'HSTS: {result[\"hsts\"]}')
+            print(f'TLS: {result[\"tls_version\"]}')
+        else:
+            print('HTTP check failed')
+        "
+        
+    - name: Test policy evaluation
+      run: |
+        python -c "
+        from agent.appsec.policy_engine import PolicyEngine
+        engine = PolicyEngine()
+        
+        results = engine.evaluate_policies()
+        failed_policies = [r for r in results if r['status'] == 'fail']
+        
+        if failed_policies:
+            print(f'{len(failed_policies)} policies failed:')
+            for policy in failed_policies:
+                print(f'  - {policy[\"id\"]}: {policy.get(\"evidence\", {})}')
+        else:
+            print('All policies passed')
+        "
+
+  # Job 5: Build and Package
+  build:
+    runs-on: ubuntu-latest
+    needs: [lint-and-test, security-policies, integration-test, appsec-validation]
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Create deployment package
+      run: |
+        # Create deployment directory
+        mkdir -p dist/security-monitor
+        
+        # Copy necessary files
+        cp -r agent dist/security-monitor/
+        cp -r config dist/security-monitor/
+        cp -r scripts dist/security-monitor/
+        cp Makefile dist/security-monitor/
+        cp README.md dist/security-monitor/
+        
+        # Create archive
+        cd dist
+        tar -czf security-monitor.tar.gz security-monitor/
+        
+        # Show package contents
+        tar -tzf security-monitor.tar.gz | head -20
+        
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-monitor-package
+        path: dist/security-monitor.tar.gz
+
+  # Job 6: Security Scan (Optional)
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  # Job 7: Notification on Failure
+  notify-failure:
+    runs-on: ubuntu-latest
+    needs: [lint-and-test, security-policies, integration-test, appsec-validation, build]
+    if: failure()
+    steps:
+    - name: Notify on failure
+      run: |
+        echo "❌ Security Monitoring CI/CD pipeline failed"
+        echo "Please check the logs for details"
+        echo "Critical issues detected in security monitoring system"
+
+  # Job 8: Success Notification
+  notify-success:
+    runs-on: ubuntu-latest
+    needs: [lint-and-test, security-policies, integration-test, appsec-validation, build]
+    if: success()
+    steps:
+    - name: Notify on success
+      run: |
+        echo "✅ Security Monitoring CI/CD pipeline completed successfully"
+        echo "All security policies validated"
+        echo "System ready for deployment"

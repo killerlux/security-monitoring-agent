@@ -1,0 +1,123 @@
+# Security Monitoring Policies Configuration
+version: "1.0"
+description: "Security policies for monitoring agent"
+
+policies:
+  - id: "POL_NO_TELNET"
+    name: "No Telnet Service"
+    description: "Telnet service should not be active due to security risks"
+    severity: "high"
+    rule: "no_telnet"
+    enabled: true
+    remediation: "Disable telnet service: sudo systemctl disable telnet"
+
+  - id: "POL_WIFI_DISABLE_IF_ETHERNET"
+    name: "WiFi Disabled with Ethernet"
+    description: "WiFi should be disabled when Ethernet connection is available"
+    severity: "warn"
+    rule: "wifi_disable_ethernet"
+    enabled: true
+    remediation: "Disable WiFi: sudo nmcli radio wifi off"
+
+  - id: "POL_HTTP_TLS_REQUIRED"
+    name: "HTTP TLS Required"
+    description: "HTTP services should use TLS encryption"
+    severity: "medium"
+    rule: "http_tls_required"
+    enabled: true
+    remediation: "Configure HTTPS or disable HTTP service"
+
+  - id: "POL_NO_LATEST_TAG"
+    name: "No Latest Docker Tags"
+    description: "Docker containers should not use :latest tag for production"
+    severity: "medium"
+    rule: "no_latest_tag"
+    enabled: true
+    remediation: "Use specific version tags instead of :latest"
+
+  - id: "POL_NO_UNEXPECTED_WEB_PORTS"
+    name: "No Unexpected Web Ports"
+    description: "Web services should only run on standard ports (80, 443, 8080, 8443)"
+    severity: "warn"
+    rule: "no_unexpected_web_ports"
+    enabled: true
+    remediation: "Move web service to standard port or update firewall rules"
+
+  - id: "POL_SMB_EXPOSED"
+    name: "SMB Not Exposed Publicly"
+    description: "SMB service should not be exposed to public networks"
+    severity: "high"
+    rule: "smb_not_public"
+    enabled: true
+    remediation: "Bind SMB to local network only or disable service"
+
+  - id: "POL_SSH_ROOT_DISABLED"
+    name: "SSH Root Login Disabled"
+    description: "SSH root login should be disabled"
+    severity: "medium"
+    rule: "ssh_root_disabled"
+    enabled: true
+    remediation: "Set PermitRootLogin no in /etc/ssh/sshd_config"
+
+  - id: "POL_NO_INTERNET_EXPOSED_SERVICES"
+    name: "No Internet Exposed Services"
+    description: "Services should not be bound to 0.0.0.0 unless necessary"
+    severity: "medium"
+    rule: "no_internet_exposed"
+    enabled: true
+    remediation: "Bind services to specific interfaces instead of 0.0.0.0"
+
+# Alert thresholds
+thresholds:
+  cpu:
+    load1: 2.0
+    load5: 1.5
+    load15: 1.0
+  memory:
+    usage_percent: 90.0
+  disk:
+    usage_percent: 85.0
+    inodes_percent: 90.0
+  network:
+    ssh_fail_threshold: 5
+    icmp_threshold: 100
+    connection_attempts: 50
+
+# AppSec configuration
+appsec:
+  http_checks:
+    enabled: true
+    timeout: 10
+    targets:
+      - "https://localhost"
+      - "http://localhost"
+  
+  sbom:
+    enabled: true
+    include_system_packages: true
+    include_python_packages: true
+    include_node_packages: true
+  
+  dast:
+    enabled: false  # Requires OWASP ZAP
+    zap_path: "zap.sh"
+    timeout: 300
+    targets: []
+  
+  policies:
+    enabled: true
+    config_file: "config/policies.yaml"
+
+# Logging configuration
+logging:
+  level: "INFO"
+  file: "/var/log/security-monitor.log"
+  max_size: "10MB"
+  backup_count: 5
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# State management
+state:
+  directory: "/var/lib/security-monitor"
+  retention_days: 30
+  cleanup_interval_hours: 24

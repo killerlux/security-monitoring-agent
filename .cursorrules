@@ -1,0 +1,168 @@
+# Security Monitoring Agent - Cursor Rules
+
+## Project Overview
+This is a Linux security monitoring agent that collects system metrics, detects changes, and triggers alerts. It includes AppSec modules for HTTP/TLS checks, SBOM generation, DAST scanning, and policy-as-code validation.
+
+## Code Standards
+
+### Python
+- Use Python 3.11+ with type hints
+- Follow PEP 8 style guidelines
+- Use descriptive variable and function names
+- Add docstrings for all public functions and classes
+- Prefer standard library over external dependencies
+- Handle exceptions gracefully with proper logging
+
+### Architecture
+- Keep collectors modular and focused on single responsibilities
+- Use dependency injection for testability
+- Implement proper error handling and timeouts
+- Follow the established directory structure:
+  - `agent/collectors/` - Data collection modules
+  - `agent/appsec/` - Application security modules
+  - `agent/models/` - Data models and schemas
+  - `agent/state/` - State management
+  - `config/` - Configuration files
+  - `scripts/` - Utility scripts
+  - `tests/` - Unit tests
+
+### Security
+- Never expose secrets or credentials in code
+- Validate all inputs and outputs
+- Use read-only operations when possible
+- Implement proper file permissions
+- Follow principle of least privilege
+
+### Testing
+- Write unit tests for all new collectors
+- Test error conditions and edge cases
+- Mock external dependencies in tests
+- Maintain test coverage above 80%
+- Use descriptive test names
+
+### Documentation
+- Update README.md for new features
+- Document configuration options
+- Provide examples for new functionality
+- Keep threat model up to date
+
+## Git Workflow
+
+### Commit Messages
+Use Conventional Commits format:
+- `feat(collector): add new network monitoring feature`
+- `fix(appsec): resolve HTTP header validation issue`
+- `test(schema): add unit tests for Port model`
+- `docs(readme): update installation instructions`
+- `refactor(state): improve cache management`
+
+### Branch Naming
+- `feature/collector-name` - New collector implementation
+- `fix/issue-description` - Bug fixes
+- `docs/topic` - Documentation updates
+- `test/component` - Test improvements
+
+### Pull Requests
+- Include clear description of changes
+- Reference related issues
+- Ensure all tests pass
+- Update documentation as needed
+- Request review from security team for policy changes
+
+## Configuration
+
+### Policies
+- Add new policies in `config/policies.yaml`
+- Implement policy evaluators in `agent/appsec/policy_engine.py`
+- Test policies with various system states
+- Document policy purpose and remediation steps
+
+### Thresholds
+- Make thresholds configurable
+- Provide sensible defaults
+- Allow runtime adjustment
+- Document impact of threshold changes
+
+## Performance
+
+### Optimization
+- Keep collection time under 30 seconds
+- Use timeouts for all external operations
+- Implement caching for expensive operations
+- Monitor memory usage and cleanup resources
+
+### Monitoring
+- Log performance metrics
+- Track collection times per module
+- Monitor error rates
+- Alert on performance degradation
+
+## Security Considerations
+
+### Data Handling
+- Sanitize all collected data
+- Avoid logging sensitive information
+- Implement data retention policies
+- Use secure file permissions
+
+### Network Security
+- Validate all network inputs
+- Use secure protocols (HTTPS, TLS)
+- Implement proper certificate validation
+- Avoid exposing internal services
+
+### System Security
+- Run with minimal required privileges
+- Validate system command outputs
+- Handle command injection vulnerabilities
+- Implement proper error handling
+
+## Deployment
+
+### Installation
+- Provide automated installation scripts
+- Validate system requirements
+- Set up proper file permissions
+- Configure logging and rotation
+
+### Monitoring
+- Set up health checks
+- Monitor disk space usage
+- Track log file sizes
+- Implement alerting for failures
+
+### Maintenance
+- Provide update procedures
+- Document backup requirements
+- Plan for disaster recovery
+- Regular security updates
+
+## Troubleshooting
+
+### Common Issues
+- Permission denied errors
+- Missing system dependencies
+- Network connectivity problems
+- Configuration validation failures
+
+### Debug Mode
+- Enable verbose logging
+- Use test mode for validation
+- Check system requirements
+- Verify configuration syntax
+
+## Integration
+
+### CI/CD
+- Validate policies in CI pipeline
+- Run security scans
+- Test on multiple Linux distributions
+- Ensure backward compatibility
+
+### External Systems
+- SIEM integration points
+- API endpoints for data export
+- Webhook support for alerts
+- Database integration options
+
+Remember: This system monitors security-critical infrastructure. Always prioritize security, reliability, and maintainability in all changes.

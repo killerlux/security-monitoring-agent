@@ -1,0 +1,40 @@
+# Security Monitoring Agent - Requirements
+# Python dependencies for the monitoring agent
+
+# Core dependencies (should be available in Python 3.11+ standard library)
+# Note: Most functionality uses standard library only
+
+# Optional dependencies for enhanced functionality
+PyYAML>=6.0          # For YAML configuration parsing
+jsonschema>=4.0      # For JSON schema validation
+pydantic>=2.0        # For data validation and serialization
+
+# Development and testing dependencies
+pytest>=7.0          # For unit testing
+pytest-mock>=3.10    # For mocking in tests
+pytest-cov>=4.0      # For test coverage
+
+# Optional: For enhanced HTTP/TLS checking
+requests>=2.28        # For HTTP requests (alternative to urllib)
+urllib3>=1.26        # For enhanced HTTP handling
+
+# Optional: For SBOM generation and CVE lookup
+# (These would be used if implementing online CVE database lookup)
+# requests>=2.28       # Already listed above
+# defusedxml>=0.7     # For safe XML parsing if needed
+
+# Optional: For DAST scanning (requires OWASP ZAP)
+# These are not Python dependencies but system requirements:
+# - OWASP ZAP (Java application)
+# - curl (for ZAP API communication)
+
+# System requirements (installed via package manager):
+# - ss-utils (for network monitoring)
+# - systemd (for service monitoring)
+# - iproute2 (for network interface monitoring)
+# - procps (for process monitoring)
+# - curl (for HTTP requests)
+
+# Note: This agent is designed to work with minimal dependencies
+# and relies primarily on Python standard library and system tools.
+# Optional dependencies are only needed for enhanced functionality.
